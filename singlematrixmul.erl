@@ -30,7 +30,7 @@ dot_product(A, B) ->
 %% Exposed function. Expected result is C = A x B.
 multiply(A, B) ->
     %% First transposes B. Indexing by row is easier, as we can zip rows and do cross product
-    multiply_matrix_rows(A, transpose(B)).
+    io:format("~w~n", [multiply_matrix_rows(A, transpose(B))]).
 
 
 %% Performs multiplication on cross product of rows (i.e. tuples of rows from 2 matrices).
@@ -42,7 +42,7 @@ multiply_matrix_rows([Head | Rest], B) ->
     % concatenate the result of this multiplication with the next ones
     [Element | multiply_matrix_rows(Rest, B)];
  
-multiply_matrix_rows([], B) ->
+multiply_matrix_rows([], _) ->
     % base case - concatenating an empty list to the end of the list
     [].
  
@@ -54,6 +54,6 @@ multiply_row_by_col(Row, [Col_Head | Col_Rest]) ->
  
     [Scalar | multiply_row_by_col(Row, Col_Rest)];
  
-multiply_row_by_col(Row, []) ->
+multiply_row_by_col(_, []) ->
     % base case - concatenating an empty list to the end of the list
     [].
