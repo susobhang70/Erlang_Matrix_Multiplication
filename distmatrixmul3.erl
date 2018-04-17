@@ -1,9 +1,11 @@
 %% Multiplies two matrices. Usage example:
-%% $ distmatrixmul:multiply([[1,2,3],[2,3,4]], [[2,2],[1,1],[6,2]]).
-%% $ distmatrixmul:multiply([[1,2,3,4],[2,3,4,3]], [[2,2],[1,1],[6,2],[11,5]]).
+%% $ distmatrixmul3:multiply([[1,2,3],[2,3,4]], [[2,2],[1,1],[6,2]]).
+%% $ distmatrixmul3:multiply([[1,2,3,4],[2,3,4,3]], [[2,2],[1,1],[6,2],[11,5]]).
 %% If the dimentions are incompatible, an error is thrown.
 
--module(distmatrixmul).
+%% Granularity - Sends a row of A and entire matrix B to a process in node.
+
+-module(distmatrixmul3).
 -export([multiply/2]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -40,6 +42,7 @@ forkjoin(NodeList, FunctionList) when is_list(FunctionList) ->
 	% self returns own PID
 	ParentPid = self(),
 
+	% io:format("~w~n", [lists:zip(FunctionList, NodeList)]),
 	% fork
 	% spawn_link - spawns and links to current process atomically
 	PidList =   [spawn_link(NodeName, 
@@ -48,7 +51,6 @@ forkjoin(NodeList, FunctionList) when is_list(FunctionList) ->
 						% this entire tuple is sent to Parent process
 						ParentPid ! {'RESULT', self(), Fun()}
 					end)
-					% fun sendto/2, [ParentPid, Fun])
 					% spawn_link is executed for each function in the functionlist
 					|| {Fun, NodeName} <- lists:zip(FunctionList, NodeList)
 				],
@@ -57,22 +59,24 @@ forkjoin(NodeList, FunctionList) when is_list(FunctionList) ->
 	[   receive
 			% computed result
 			{'RESULT', Pid, Result} ->
-				% Result;
 				Result
+				% Result;
 			% error case, if spawned process exits erroneously
-			% {'EXIT', Pid, Reason} ->
-			% 	erlang:display(Reason),
+			% {'EXIT', Pid, _} ->
 			% 	[]
 		end 
 		% keeps receiving for each spawned process, stored in PidList
 	|| Pid <- PidList].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-multiply(A, B, NodeList) when not is_list(hd(A)) and is_list(hd(B)) ->
+multiply(A, B) when not is_list(hd(A)) and is_list(hd(B)) ->
 	% distribute computation of dot product of two rows
-	forkjoin(NodeList, [fun() -> dot_product(A,X) end || X<-B]).
+	[dot_product(A,X) || X<-B];
 
 multiply(A, B) when is_list(hd(A)) and is_list(hd(B)) -> 
+
+	NODECOUNT = 4,
+
 	% first find transpose of B
 	BT = transpose(B),
 	
@@ -80,13 +84,14 @@ multiply(A, B) when is_list(hd(A)) and is_list(hd(B)) ->
 	RowCount = length(BT),
 	
 	% spawn those many nodes to distribute processing
-	NodeNames = [list_to_atom(atom_to_list(node) ++ integer_to_list(NodeNumber)) 
-				|| NodeNumber <- lists:seq(1, RowCount)],
+	NodeNames = [list_to_atom(atom_to_list(node) ++ integer_to_list(NodeNumber rem NODECOUNT)) 
+				|| NodeNumber <- lists:seq(0, RowCount-1)],
 	Hostname = element(2,inet:gethostname()),
-	NodeList = [element(2, Pair) || Pair <-[slave:start_link(Hostname, Node) || Node <- NodeNames]],
+	TempList = [element(2, Pair) || Pair <-[slave:start_link(Hostname, Node) || Node <- NodeNames]],
+	NodeList = [X || X<-TempList, not is_tuple(X)] ++ [element(2,X) || X<-TempList, is_tuple(X)],
 	
 	% then call multiply for each row in A
-	Result = [multiply(X,BT, NodeList) || X<-A],
+	Result = forkjoin(NodeList, [fun() -> multiply(X,BT) end || X<-A]),
 	
 	% stop all the nodes
 	[slave:stop(NodeName) || NodeName <- NodeList],
