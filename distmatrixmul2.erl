@@ -5,6 +5,8 @@
 
 %% Granularity - Sends a row of A and another row of B to a process in node.
 
+%% erl -sname masternode, nodes(known), nodes(connected)
+
 -module(distmatrixmul2).
 -export([multiply/2]).
 
@@ -90,10 +92,19 @@ multiply(A, B) when is_list(hd(A)) and is_list(hd(B)) ->
 	TempList = [element(2, Pair) || Pair <-[slave:start_link(Hostname, Node) || Node <- NodeNames]],
 	NodeList = [X || X<-TempList, not is_tuple(X)] ++ [element(2,X) || X<-TempList, is_tuple(X)],
 	
+	% note current time
+	StartTime = erlang:monotonic_time(microsecond),
+
 	% then call multiply for each row in A
 	Result = [multiply(X,BT, NodeList) || X<-A],
 	
+	% note end time
+	EndTime = erlang:monotonic_time(microsecond),
+
 	% stop all the nodes
 	[slave:stop(NodeName) || NodeName <- NodeList],
 	
+	TotalTime = EndTime - StartTime,
+
+	io:fwrite("Time: ~w~n", [TotalTime]),
 	io:format("~w~n", [Result]).

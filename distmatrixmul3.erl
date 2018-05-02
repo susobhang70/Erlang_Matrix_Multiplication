@@ -81,7 +81,7 @@ multiply(A, B) when is_list(hd(A)) and is_list(hd(B)) ->
 	BT = transpose(B),
 	
 	% find number of rows in transposed B
-	RowCount = length(BT),
+	RowCount = length(A),
 	
 	% spawn those many nodes to distribute processing
 	NodeNames = [list_to_atom(atom_to_list(node) ++ integer_to_list(NodeNumber rem NODECOUNT)) 
@@ -90,10 +90,20 @@ multiply(A, B) when is_list(hd(A)) and is_list(hd(B)) ->
 	TempList = [element(2, Pair) || Pair <-[slave:start_link(Hostname, Node) || Node <- NodeNames]],
 	NodeList = [X || X<-TempList, not is_tuple(X)] ++ [element(2,X) || X<-TempList, is_tuple(X)],
 	
+	% note current time
+	StartTime = erlang:monotonic_time(microsecond),
+
 	% then call multiply for each row in A
 	Result = forkjoin(NodeList, [fun() -> multiply(X,BT) end || X<-A]),
 	
+	% note end time
+	EndTime = erlang:monotonic_time(microsecond),
+	
 	% stop all the nodes
 	[slave:stop(NodeName) || NodeName <- NodeList],
+	
+	TotalTime = EndTime - StartTime,
+
+	io:fwrite("Time: ~w~n", [TotalTime]),
 	
 	io:format("~w~n", [Result]).
